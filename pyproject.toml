@@ -1,0 +1,42 @@
+[project]
+name = "codeasst"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    {name = "Denil Parmar",email = "denilparmar@gmail.com"}
+]
+requires-python = ">=3.12"
+dependencies = [
+    "black>=26.5.1",
+    "chromadb>=1.5.9",
+    "fastembed>=0.8.1",
+    "isort>=9.0.1",
+    "langchain>=1.4.2",
+    "langchain-anthropic>=1.7.3",
+    "langchain-huggingface>=1.2.2",
+    "langchain-openai>=1.6.4",
+    "langchain-qdrant>=1.1.0,<2.0.0",
+    "langgraph-checkpoint-sqlite>=3.1.1",
+    "openai>=3.19.0",
+    "pydantic>=2.13.5",
+    "python-dotenv>=1.2.3",
+    "pyyaml>=6.0.3",
+    "rich>=15.0.0",
+    "tree-sitter==0.21.3",
+    "tree-sitter-languages==1.10.2",
+]
+
+[project.scripts]
+codeasst = "main:run"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main", "config"]
+packages = ["observability"]
+
+[tool.isort]
+profile = "black"
