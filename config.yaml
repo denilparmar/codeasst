@@ -11,7 +11,7 @@ llm:
  model: gpt-4o
 
 embeddings:
- provider: openai             
+ provider: openai             # openai | huggingface
  model: text-embedding-3-small
 
 chromadb:
