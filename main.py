@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
@@ -8,6 +9,7 @@ from config import config
 from observability import get_logger
 from llm.factory import get_llm, get_embedder
 from context.indexers.semantic_chroma import index_codebase
+from agent.orchestrator import handle_query
 from pathlib import Path
 
 load_dotenv()
@@ -93,7 +95,20 @@ def handle_ask(question: str) -> None:
         console.print("[yellow]Usage: /ask <question>[/yellow]")
         return
     logger.info(f"Ask command received: {question}")
-    console.print(f"[dim]Searching for: {question}...[/dim]")
+    with console.status("[dim]Searching the codebase...[/dim]", spinner="dots"):
+        response = handle_query(question)
+
+    console.print()
+    console.print(
+        Panel(
+            Markdown(response),
+            title=f"[bold cyan]{question}[/bold cyan]",
+            title_align="left",
+            border_style="cyan",
+            padding=(1, 2),
+        )
+    )
+    console.print()
 
 
 def show_semantic_index(collection: chromadb.Collection) -> None:

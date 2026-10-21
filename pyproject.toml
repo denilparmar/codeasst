@@ -36,7 +36,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 py-modules = ["main", "config"]
-packages = ["observability"]
+packages = ["observability", "llm", "context", "context.indexers", "context.retrievers"]
 
 [tool.isort]
 profile = "black"
