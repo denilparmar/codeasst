@@ -46,9 +46,9 @@ def retrieve(query: str, k: int = 5) -> list[dict]:
             }
         )
 
-    logger.debug(
-        f"  Retrieved {meta['type']} '{meta['name']}' from {meta['source']} (distance: {dist:.4f})"
-    )
+        logger.debug(
+            f"  Retrieved {meta['type']} '{meta['name']}' from {meta['source']} (distance: {dist:.4f})"
+        )
 
     logger.info(f"Retrieved {len(chunks)} chunks")
     return chunks

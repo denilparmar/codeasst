@@ -8,7 +8,7 @@ import chromadb
 from config import config
 from observability import get_logger
 from llm.factory import get_llm, get_embedder
-from context.indexers.semantic_chroma import index_codebase
+from context.indexers.factory import get_indexer, get_index_inspector
 from agent.orchestrator import handle_query
 from pathlib import Path
 
@@ -27,23 +27,11 @@ COMMANDS = {
 }
 
 
-def get_or_create_index() -> chromadb.Collection:
-    """Load existing index or create a new one by indexing current directory."""
-    chroma_client = chromadb.PersistentClient(path=config["chromadb"]["persist_dir"])
-    collection = chroma_client.get_or_create_collection(
-        name=config["chromadb"]["collection_name"]
-    )
-
-    if collection.count() > 0:
-        logger.info(f"Loaded existing index with {collection.count()} chunks")
-        console.print(f"[dim]Loaded existing index — {collection.count()} chunks[/dim]")
-        return collection
-
-    # Auto-index the current working directory
+def get_or_create_index():
     repo_path = str(Path.cwd())
-    logger.info(f"Indexing repo: {repo_path}")
-    console.print(f"[dim]Indexing {repo_path}...[/dim]")
-    return index_codebase(repo_path)
+    logger.info(f"Checking index for: {repo_path}")
+    console.print(f"[dim]Checking index for {repo_path}...[/dim]")
+    return get_indexer()(repo_path)
 
 
 def initialize():
@@ -57,9 +45,9 @@ def initialize():
         f"[dim]Embedder: {config['embeddings']['provider']} / {config['embeddings']['model']}[/dim]"
     )
 
-    collection = get_or_create_index()
-    console.print(f"[green]✓ Ready — {collection.count()} chunks indexed[/green]\n")
-    return llm, embedder, collection
+    index = get_or_create_index()
+    console.print(f"[green]✓ Ready[/green]\n")
+    return llm, embedder, index
 
 
 def show_banner() -> None:
@@ -133,7 +121,7 @@ def show_semantic_index(collection: chromadb.Collection) -> None:
 
 def run() -> None:
     logger.info("Starting codeasst...")
-    llm, embedder, collection = initialize()
+    llm, embedder, index = initialize()
     show_banner()
     show_help()
 
@@ -162,7 +150,9 @@ def run() -> None:
         elif command == "/ask":
             handle_ask(args)
         elif command == "/show_semantic_index":
-            show_semantic_index(collection)
+            logger.info("Showing semantic index")
+            get_index_inspector()(index)
+
         else:
             logger.warning(f"Unknown command received: {user_input}")
             console.print(f"[yellow]Unknown command: {command}[/yellow]\n")

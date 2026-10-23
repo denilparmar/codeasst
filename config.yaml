@@ -1,11 +1,3 @@
-rag:
- mode: hybrid # semantic | hybrid
-
-memory:
- db_path: .memory/memory.db
- summarize_at_tokens: 4000
- keep_last_messages: 20
-
 llm:
  provider: openai        # openai | anthropic
  model: gpt-4o
@@ -14,17 +6,25 @@ embeddings:
  provider: openai             # openai | huggingface
  model: text-embedding-3-small
 
+vector_store:
+ provider: qdrant
+ retrieval_mode: hybrid  # dense | sparse | hybrid
+
 chromadb:
  persist_dir: .chromadb/
  collection_name: codebase
+
+qdrant:
+ collection_name: prism_codebase
 
 elasticsearch:
  url: http://localhost:9200
  index_name: codebase
 
-vector_store:
- provider: qdrant
- retrieval_mode: hybrid  # dense | sparse | hybrid
+rag:
+ mode: semantic # semantic | hybrid
 
-qdrant:
- collection_name: prism_codebase_hybrid
+memory:
+ db_path: .memory/memory.db
+ summarize_at_tokens: 4000
+ keep_last_messages: 20
