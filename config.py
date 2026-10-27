@@ -54,3 +54,13 @@ def qdrant_collection_name() -> str:
     folder = re.sub(r"[^A-Za-z0-9_-]", "_", project.name)
     digest = hashlib.sha1(str(project).encode()).hexdigest()[:8]
     return f"{config['qdrant']['collection_name']}_{folder}_{digest}"
+
+
+def memory_db_path() -> Path:
+    """Per-project memory DB, resolved against the current directory; creates its folder on first use."""
+    db_path = Path.cwd().resolve() / config["memory"]["db_path"]
+    if not db_path.parent.exists():
+        db_path.parent.mkdir(parents=True)
+        # keep the memory folder out of the target project's git
+        (db_path.parent / ".gitignore").write_text("*\n")
+    return db_path

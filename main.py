@@ -11,6 +11,8 @@ from llm.factory import get_llm, get_embedder
 from context.indexers.factory import get_indexer, get_index_inspector
 from agent.orchestrator import handle_query
 from pathlib import Path
+from memory.session import get_current_session, new_session, switch_session
+from memory.short_term import get_session_history
 
 load_dotenv()
 
@@ -23,6 +25,10 @@ COMMANDS = {
     "/ask <question>": "Ask a question about the indexed code",
     "/show_semantic_index": "Shows all the indexes",
     "/help": "Show available commands",
+    "/new_session": "starts a new session",
+    "/switch": "switch to a new session",
+    "/session": "shows the current session",
+    "/session_history [thread_id]": "shows the history for a session (default: current)",
     "/exit, /quit": "Quit CodeAsst",
 }
 
@@ -46,8 +52,11 @@ def initialize():
     )
 
     index = get_or_create_index()
+    session_id = get_current_session()
+    console.print(f"[dim]Session: {session_id}[/dim]")
+
     console.print(f"[green]✓ Ready[/green]\n")
-    return llm, embedder, index
+    return llm, embedder, index, session_id
 
 
 def show_banner() -> None:
@@ -78,13 +87,13 @@ def handle_index(path: str) -> None:
     console.print(f"[dim]Indexing {path}...[/dim]")
 
 
-def handle_ask(question: str) -> None:
+def handle_ask(question: str, thread_id: str) -> None:
     if not question:
         console.print("[yellow]Usage: /ask <question>[/yellow]")
         return
     logger.info(f"Ask command received: {question}")
     with console.status("[dim]Searching the codebase...[/dim]", spinner="dots"):
-        response = handle_query(question)
+        response = handle_query(question, thread_id)
 
     console.print()
     console.print(
@@ -119,9 +128,21 @@ def show_semantic_index(collection: chromadb.Collection) -> None:
         console.print(f"  Code     :\n[dim]{doc[:300]}[/dim]\n")
 
 
+def show_session_history(thread_id: str) -> None:
+    history = get_session_history(thread_id=thread_id)
+    if not history:
+        console.print(f"[dim]No history for session {thread_id}[/dim]\n")
+        return
+    for message in history:
+        style = "cyan" if message["role"] == "user" else "green"
+        console.print(
+            f"[bold {style}]{message['role']}:[/bold {style}] {message['content']}\n"
+        )
+
+
 def run() -> None:
     logger.info("Starting codeasst...")
-    llm, embedder, index = initialize()
+    llm, embedder, index, session_id = initialize()
     show_banner()
     show_help()
 
@@ -148,10 +169,21 @@ def run() -> None:
         elif command == "/index":
             handle_index(args)
         elif command == "/ask":
-            handle_ask(args)
+            handle_ask(args, session_id)
         elif command == "/show_semantic_index":
             logger.info("Showing semantic index")
             get_index_inspector()(index)
+        elif user_input == "/new_session":
+            session_id = new_session()
+            console.print(f"[green]New session started: {session_id}[/green]")
+        elif user_input.startswith("/switch "):
+            target = user_input.removeprefix("/switch ").strip()
+            session_id = switch_session(target)
+            console.print(f"[green]Switched to session: {session_id}[/green]")
+        elif command == "/session_history":
+            show_session_history(args or session_id)
+        elif user_input == "/session":
+            console.print(f"[dim]Current session: {session_id}[/dim]")
 
         else:
             logger.warning(f"Unknown command received: {user_input}")
