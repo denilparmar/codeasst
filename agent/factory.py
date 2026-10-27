@@ -4,6 +4,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from llm.factory import get_llm
 from agent.tools import search_codebase
 from observability import get_logger
+from memory.short_term import get_checkpointer, get_summarization_middleware
 
 logger = get_logger(__name__)
 
@@ -14,8 +15,16 @@ If you cannot find the answer in the codebase, say so explicitly."""
 
 
 def build_agent():
-    """Create and return a langchain agent"""
+    """Create and return a LangChain agent with persistent memory."""
     llm = get_llm()
     tools = [search_codebase]
-    logger.info("Creating agent")
-    return create_agent(llm, tools=tools, system_prompt=SYSTEM_PROMPT)
+    checkpointer = get_checkpointer()
+    middleware = get_summarization_middleware()
+
+    return create_agent(
+        llm,
+        tools=tools,
+        system_prompt=SYSTEM_PROMPT,
+        checkpointer=checkpointer,
+        middleware=[middleware],
+    )
