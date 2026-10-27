@@ -1,3 +1,5 @@
+import hashlib
+import re
 import yaml
 from enum import StrEnum
 from pathlib import Path
@@ -44,3 +46,11 @@ def load_config() -> dict:
 
 
 config = load_config()
+
+
+def qdrant_collection_name() -> str:
+    """Per-project Qdrant collection: <base>_<folder>_<path hash>, keyed on the current directory."""
+    project = Path.cwd().resolve()
+    folder = re.sub(r"[^A-Za-z0-9_-]", "_", project.name)
+    digest = hashlib.sha1(str(project).encode()).hexdigest()[:8]
+    return f"{config['qdrant']['collection_name']}_{folder}_{digest}"

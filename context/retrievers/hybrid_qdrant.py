@@ -2,7 +2,7 @@ import os
 from langchain_qdrant import QdrantVectorStore, RetrievalMode, FastEmbedSparse
 
 
-from config import config
+from config import config, qdrant_collection_name
 from llm.factory import get_embedder
 from observability import get_logger
 
@@ -21,7 +21,7 @@ def retrieve(query: str, k: int = 5) -> list[dict]:
     Retrieve top-k chunks using dense, sparse, or hybrid mode — controlled by config.
     """
     embedder = get_embedder()
-    collection_name = config["qdrant"]["collection_name"]
+    collection_name = qdrant_collection_name()
     mode = config["vector_store"].get("retrieval_mode", "hybrid")
     retrieval_mode = RETRIEVAL_MODE_MAP.get(mode, RetrievalMode.HYBRID)
 

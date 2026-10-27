@@ -4,7 +4,7 @@ from langchain_core.documents import Document
 from qdrant_client import QdrantClient
 
 
-from config import config
+from config import config, qdrant_collection_name
 from context.indexers.code_parser import parse_file, get_source_files
 from llm.factory import get_embedder
 from observability import get_logger
@@ -18,7 +18,7 @@ def index_codebase(repo_path: str) -> QdrantVectorStore:
     Returns the QdrantVectorStore. Skips indexing if collection already has data.
     """
     embedder = get_embedder()
-    collection_name = config["qdrant"]["collection_name"]
+    collection_name = qdrant_collection_name()
     url = os.getenv("QDRANT_URL")
     api_key = os.getenv("QDRANT_API_KEY")
 
@@ -81,7 +81,7 @@ def show_index(vector_store: QdrantVectorStore) -> None:
 
     console = Console()
     client = vector_store.client
-    collection_name = config["qdrant"]["collection_name"]
+    collection_name = qdrant_collection_name()
     results = client.scroll(
         collection_name=collection_name,
         with_payload=True,

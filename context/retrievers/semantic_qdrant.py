@@ -2,7 +2,7 @@ import os
 from langchain_qdrant import QdrantVectorStore
 
 
-from config import config
+from config import config, qdrant_collection_name
 from llm.factory import get_embedder
 from observability import get_logger
 
@@ -20,7 +20,7 @@ def retrieve(query: str, k: int = 5) -> list[dict]:
         embedding=embedder,
         url=os.getenv("QDRANT_URL"),
         api_key=os.getenv("QDRANT_API_KEY"),
-        collection_name=config["qdrant"]["collection_name"],
+        collection_name=qdrant_collection_name(),
     )
 
     logger.info(f"Retrieving top {k} chunks for query: {query}")
