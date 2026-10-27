@@ -22,7 +22,7 @@ elasticsearch:
  index_name: codebase
 
 rag:
- mode: semantic # semantic | hybrid
+ mode: hybrid # semantic | hybrid
 
 memory:
  db_path: .memory/memory.db
