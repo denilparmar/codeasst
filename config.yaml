@@ -15,7 +15,7 @@ chromadb:
  collection_name: codebase
 
 qdrant:
- collection_name: prism_codebase
+ collection_name: codeasst
 
 elasticsearch:
  url: http://localhost:9200
