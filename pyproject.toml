@@ -15,6 +15,7 @@ dependencies = [
     "langchain>=1.4.2",
     "langchain-anthropic>=1.7.3",
     "langchain-huggingface>=1.2.2",
+    "langchain-mcp-adapters>=0.3.2",
     "langchain-openai>=1.6.4",
     "langchain-qdrant>=1.1.0,<2.0.0",
     "langgraph-checkpoint-sqlite>=3.1.1",
@@ -28,7 +29,7 @@ dependencies = [
 ]
 
 [project.scripts]
-codeasst = "main:run"
+codeasst = "main:cli"
 
 [build-system]
 requires = ["setuptools>=61"]
@@ -36,7 +37,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 py-modules = ["main", "config"]
-packages = ["agent", "observability", "llm", "context", "context.indexers", "context.retrievers", "memory", "tools"]
+packages = ["agent", "observability", "llm", "context", "context.indexers", "context.retrievers", "memory", "tools", "codeasst_mcp"]
 
 [tool.isort]
 profile = "black"

@@ -12,7 +12,11 @@ from context.indexers.factory import get_indexer, get_index_inspector
 from agent.orchestrator import handle_query
 from pathlib import Path
 from memory.session import get_current_session, new_session, switch_session
-from memory.short_term import get_session_history
+from memory.short_term import get_session_history, get_checkpointer_db_path
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+import asyncio
+import signal
+from agent.factory import build_agent
 
 load_dotenv()
 
@@ -40,7 +44,7 @@ def get_or_create_index():
     return get_indexer()(repo_path)
 
 
-def initialize():
+async def initialize(checkpointer):
     """Bootstrap LLM, embedder, and index before the REPL starts."""
     llm = get_llm()
     embedder = get_embedder()
@@ -53,10 +57,11 @@ def initialize():
 
     index = get_or_create_index()
     session_id = get_current_session()
+    agent = await build_agent(checkpointer)
     console.print(f"[dim]Session: {session_id}[/dim]")
 
     console.print(f"[green]✓ Ready[/green]\n")
-    return llm, embedder, index, session_id
+    return llm, embedder, index, agent, session_id
 
 
 def show_banner() -> None:
@@ -87,13 +92,13 @@ def handle_index(path: str) -> None:
     console.print(f"[dim]Indexing {path}...[/dim]")
 
 
-def handle_ask(question: str, thread_id: str) -> None:
+async def handle_ask(agent, question: str, thread_id: str) -> None:
     if not question:
         console.print("[yellow]Usage: /ask <question>[/yellow]")
         return
     logger.info(f"Ask command received: {question}")
     with console.status("[dim]Searching the codebase...[/dim]", spinner="dots"):
-        response = handle_query(question, thread_id)
+        response = await handle_query(agent, question, thread_id)
 
     console.print()
     console.print(
@@ -140,56 +145,70 @@ def show_session_history(thread_id: str) -> None:
         )
 
 
-def run() -> None:
+async def run() -> None:
     logger.info("Starting codeasst...")
-    llm, embedder, index, session_id = initialize()
-    show_banner()
-    show_help()
+    # asyncio.run() turns Ctrl-C into task cancellation; restore the default
+    # handler so Ctrl-C raises KeyboardInterrupt and is handled in cli().
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    async with AsyncSqliteSaver.from_conn_string(
+        get_checkpointer_db_path()
+    ) as checkpointer:
+        llm, embedder, index, agent, session_id = await initialize(checkpointer)
+        show_banner()
+        show_help()
 
-    while True:
-        try:
-            user_input = Prompt.ask("[bold green]>[/bold green]").strip()
-        except (KeyboardInterrupt, EOFError):
-            user_input = "/exit"
-            console.print()
+        while True:
+            try:
+                user_input = Prompt.ask("[bold green]>[/bold green]").strip()
+            except (KeyboardInterrupt, EOFError):
+                user_input = "/exit"
+                console.print()
 
-        if not user_input:
-            continue
+            if not user_input:
+                continue
 
-        command, _, args = user_input.partition(" ")
-        command = command.lower()
-        args = args.strip()
+            command, _, args = user_input.partition(" ")
+            command = command.lower()
+            args = args.strip()
 
-        if command in ("/exit", "/quit"):
-            logger.info("Shutting down")
-            console.print("[dim]Goodbye![/dim]")
-            break
-        elif command == "/help":
-            show_help()
-        elif command == "/index":
-            handle_index(args)
-        elif command == "/ask":
-            handle_ask(args, session_id)
-        elif command == "/show_semantic_index":
-            logger.info("Showing semantic index")
-            get_index_inspector()(index)
-        elif user_input == "/new_session":
-            session_id = new_session()
-            console.print(f"[green]New session started: {session_id}[/green]")
-        elif user_input.startswith("/switch "):
-            target = user_input.removeprefix("/switch ").strip()
-            session_id = switch_session(target)
-            console.print(f"[green]Switched to session: {session_id}[/green]")
-        elif command == "/session_history":
-            show_session_history(args or session_id)
-        elif user_input == "/session":
-            console.print(f"[dim]Current session: {session_id}[/dim]")
+            if command in ("/exit", "/quit"):
+                logger.info("Shutting down")
+                console.print("[dim]Goodbye![/dim]")
+                break
+            elif command == "/help":
+                show_help()
+            elif command == "/index":
+                handle_index(args)
+            elif command == "/ask":
+                await handle_ask(agent, args, session_id)
+            elif command == "/show_semantic_index":
+                logger.info("Showing semantic index")
+                get_index_inspector()(index)
+            elif user_input == "/new_session":
+                session_id = new_session()
+                console.print(f"[green]New session started: {session_id}[/green]")
+            elif user_input.startswith("/switch "):
+                target = user_input.removeprefix("/switch ").strip()
+                session_id = switch_session(target)
+                console.print(f"[green]Switched to session: {session_id}[/green]")
+            elif command == "/session_history":
+                show_session_history(args or session_id)
+            elif user_input == "/session":
+                console.print(f"[dim]Current session: {session_id}[/dim]")
 
-        else:
-            logger.warning(f"Unknown command received: {user_input}")
-            console.print(f"[yellow]Unknown command: {command}[/yellow]\n")
-            show_help()
+            else:
+                logger.warning(f"Unknown command received: {user_input}")
+                console.print(f"[yellow]Unknown command: {command}[/yellow]\n")
+                show_help()
+
+
+def cli() -> None:
+    """Console-script entry point."""
+    try:
+        asyncio.run(run())
+    except KeyboardInterrupt:
+        console.print("\n[dim]Goodbye![/dim]")
 
 
 if __name__ == "__main__":
-    run()
+    cli()
