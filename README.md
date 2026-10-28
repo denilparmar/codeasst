@@ -12,6 +12,7 @@ CodeAsst is a command-line AI assistant that answers questions about a codebase.
 - **Per-project indexes**: each project gets its own Qdrant collection (`<name>_<folder>_<path hash>`), and an existing index is reused instead of rebuilt.
 - **Pluggable LLMs and embeddings**: OpenAI or Anthropic chat models; OpenAI or Hugging Face embeddings.
 - **Agentic Q&A**: a LangChain agent calls a `search_codebase` tool before answering, so its answers are based on the actual code.
+- **Filesystem and terminal tools**: the agent can also read, write, append to and delete files, list directories, and run shell commands (with a 30-second timeout). See [Agent tools](#agent-tools).
 - **Short-term memory with sessions**: conversation state is saved to SQLite in a `.memory/` folder inside the project you run from (automatically git-ignored). Long conversations are automatically summarized once they exceed a token threshold.
 - **Rich terminal UI**: answers are rendered as Markdown in the terminal.
 
@@ -44,8 +45,11 @@ codeasst/
 ├── memory/
 │   ├── session.py           # Create / resume / switch session ids
 │   └── short_term.py        # SQLite checkpointer, history, summarization
-└── observability/
-    └── logger.py            # Logging setup
+├── observability/
+│   └── logger.py            # Logging setup
+└── tools/
+    ├── filesystem_tools.py  # read/write/append/delete files, list directories
+    └── terminal_tools.py    # Run shell commands, optionally in a given directory
 ```
 
 ## Getting started
@@ -66,6 +70,14 @@ uv sync
 ```
 
 This installs CodeAsst in editable mode and provides the `codeasst` command inside the virtual environment. If you add a new top-level package to `pyproject.toml`, run `uv sync --reinstall-package codeasst` to pick it up.
+
+To put `codeasst` on your `PATH` instead, install it as a uv tool:
+
+```bash
+uv tool install --editable .
+```
+
+Code changes in existing packages take effect immediately. After adding or renaming a top-level package (for example `tools/`), reinstall with `uv tool install --editable . --force`, otherwise you'll get `ModuleNotFoundError` on startup.
 
 ### Configure
 
@@ -146,6 +158,28 @@ Example:
 > /session_history
 > /new_session
 ```
+
+## Agent tools
+
+The agent chooses which of these tools to call while answering a question.
+
+| Tool | Module | Description |
+| --- | --- | --- |
+| `search_codebase(query)` | `agent/tools.py` | Search the vector index and return the top 5 matching chunks with file, line range and symbol name |
+| `read_file(file_path)` | `tools/filesystem_tools.py` | Read a UTF-8 text file (up to 10 MB) |
+| `write_file(file_path, content)` | `tools/filesystem_tools.py` | Create or overwrite a file, creating parent directories as needed |
+| `append_file(file_path, content)` | `tools/filesystem_tools.py` | Append to an existing file |
+| `delete_file(file_path)` | `tools/filesystem_tools.py` | Delete a file (not directories) |
+| `list_directory(directory)` | `tools/filesystem_tools.py` | List the entries in a directory |
+| `file_exists(file_path)` | `tools/filesystem_tools.py` | Check whether a file or directory exists |
+| `run_command(command)` | `tools/terminal_tools.py` | Run a shell command from the current directory |
+| `run_in_directory(command, directory)` | `tools/terminal_tools.py` | Run a shell command in the given directory |
+
+Shell commands time out after 30 seconds and return stdout, stderr and a non-zero exit code. Tools return errors as text (for example `Error: file not found: ...`) so the agent can recover instead of crashing.
+
+Tools are registered in `build_agent()` in `agent/factory.py`. To add one, define a function decorated with `@tool` from `langchain.tools`, give it a clear docstring (the agent uses it to decide when to call the tool), and add it to the `tools` list.
+
+> **Warning:** the filesystem and terminal tools run without asking for confirmation and aren't limited to the project directory. The agent can change or delete any file your user account can access, and run any shell command. The command blocklist only catches a few patterns (such as `rm -rf /` and `mkfs`) and is easy to bypass. Use CodeAsst on projects under version control, and don't run it with elevated privileges.
 
 ## Data stored in your project
 
