@@ -13,7 +13,7 @@ _CONFIG_PATH = Path(__file__).resolve().parent.parent / "codeasst_mcp_servers.js
 def load_codeasst_mcp_configs() -> dict:
     """Return mcp_servers dict from codeasst_mcp_servers.json with env vars resolved.
     CWD is injected at load time so ${CWD} in the config always resolves to the
-    directory where educosys claude was launched — not the package install location.
+    directory where codeasst was launched — not the package install location.
     """
     os.environ.setdefault("CWD", str(Path.cwd()))
     raw = json.loads(_CONFIG_PATH.read_text())
