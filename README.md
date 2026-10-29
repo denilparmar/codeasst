@@ -18,6 +18,7 @@ CodeAsst is a command-line AI assistant that answers questions about a codebase.
   - **GitHub**: read and change issues, pull requests and files on GitHub.
 
   See [MCP servers](#mcp-servers).
+- **Human in the loop**: before a risky tool call (a shell command that isn't read-only, or an MCP tool that writes), the agent pauses and asks you to approve, edit or reject it. See [Approvals](#approvals-human-in-the-loop).
 - **Resilient tool calls**: if a tool raises an error, the agent receives it as the tool's result and can explain or recover, instead of the run failing. Sessions left with an unanswered tool call (for example after a crash) are repaired automatically on the next message.
 - **Short-term memory with sessions**: conversation state is saved to SQLite in a `.memory/` folder inside the project you run from (automatically git-ignored). Long conversations are automatically summarized once they exceed a token threshold.
 - **Rich terminal UI**: answers are rendered as Markdown in the terminal.
@@ -33,6 +34,7 @@ codeasst/
 ├── codeasst_mcp_servers.json # MCP servers to connect to at startup
 ├── agent/
 │   ├── factory.py           # Builds the LangChain agent (LLM + tools + memory)
+│   ├── hitl.py              # Approval rules for risky tool calls (human in the loop)
 │   ├── middleware.py        # Turns tool errors into results; repairs broken sessions
 │   ├── orchestrator.py      # Runs a query through the agent for a session
 │   └── tools.py             # `search_codebase` tool used by the agent
@@ -133,6 +135,11 @@ memory:
   db_path: .memory/memory.db
   summarize_at_tokens: 4000
   keep_last_messages: 20
+
+hitl:
+  enabled: true             # ask before risky tool calls
+  safe_command_prefixes: [ls, cat, git status, ...]  # shell commands that run without asking
+  approve_tools: [write_file, push_files, ...]       # tools that always ask
 ```
 
 ### Run
@@ -190,7 +197,7 @@ Shell commands time out after 30 seconds and return stdout, stderr and a non-zer
 
 Built-in tools are registered in `build_agent()` in `agent/factory.py`. To add one, define a function decorated with `@tool` from `langchain.tools`, give it a clear docstring (the agent uses it to decide when to call the tool), and add it to the `tools` list. Don't reuse the name of an MCP tool.
 
-> **Warning:** the terminal tools run without asking for confirmation and aren't limited to the project directory. Through them, the agent can run any shell command, including ones that change or delete files outside the project. The command blocklist only catches a few patterns (such as `rm -rf /` and `mkfs`) and is easy to bypass. Use CodeAsst on projects under version control, and don't run it with elevated privileges.
+> **Warning:** the terminal tools aren't limited to the project directory. Commands that aren't read-only need your [approval](#approvals-human-in-the-loop), but once you approve one it can change or delete anything your user can. With `hitl.enabled: false`, every command runs without asking. Use CodeAsst on projects under version control, and don't run it with elevated privileges.
 
 ### Filesystem tools (MCP)
 
@@ -216,7 +223,34 @@ Example questions:
 > /ask what files does PR #1 change, and how do they affect the agent?
 ```
 
-> **Warning:** GitHub write tools run immediately, with no confirmation, using your token. Give `GITHUB_TOKEN` only the repositories and permissions you need. Use a fine-grained, read-only token if you only want the agent to read from GitHub.
+> **Warning:** GitHub write tools use your token. They need your [approval](#approvals-human-in-the-loop) while `hitl.enabled` is on, and run immediately when it's off. Give `GITHUB_TOKEN` only the repositories and permissions you need. Use a fine-grained, read-only token if you only want the agent to read from GitHub.
+
+### Approvals (human in the loop)
+
+`HumanInTheLoopMiddleware` (set up in `agent/hitl.py`) pauses the agent before a risky tool call and shows it in an **Approval needed** panel:
+
+```
+╭─ Approval needed ─────────────────────╮
+│ run_command                           │
+│ {                                     │
+│   "command": "git checkout -b fix"    │
+│ }                                     │
+╰───────────────────────────────────────╯
+Decision [approve/edit/reject] (reject):
+```
+
+- **approve** runs the call as is.
+- **edit** lets you change the arguments (as JSON) before it runs.
+- **reject** skips it. You can give a reason, which the agent sees. Pressing Ctrl-C at the prompt rejects all pending calls.
+
+What needs approval:
+
+- `run_command` and `run_in_directory`, unless the command starts with one of `hitl.safe_command_prefixes` (such as `ls`, `cat`, `grep`, `git status`, `git diff`). A command containing `;`, `&`, `|`, `>`, `<`, a backtick, `$(` or a newline always needs approval.
+- Every tool in `hitl.approve_tools`. By default, these are the write tools of the filesystem and GitHub MCP servers.
+
+Other tools, such as `search_codebase` and the MCP read tools, run without asking. To turn approvals off, set `hitl.enabled: false` in `config.yaml`.
+
+> **Note:** the safe prefixes are a convenience, not a sandbox. For example, `find . -delete` starts with `find` and runs without asking. Remove a prefix from the list if you don't want its commands to run unreviewed.
 
 ### Error handling
 

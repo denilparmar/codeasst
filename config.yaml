@@ -28,3 +28,26 @@ memory:
  db_path: .memory/memory.db
  summarize_at_tokens: 4000
  keep_last_messages: 20
+
+hitl:
+ enabled: true
+ # shell commands starting with these run without asking (unless chained/redirected)
+ safe_command_prefixes: [ls, cat, head, tail, pwd, wc, grep, find, tree, git status, git log, git diff, git show, git branch]
+ # tools that always need approval
+ approve_tools:
+  - write_file           # filesystem MCP
+  - edit_file
+  - create_directory
+  - move_file
+  - create_or_update_file  # github MCP
+  - push_files
+  - create_branch
+  - create_issue
+  - create_pull_request
+  - merge_pull_request
+  - add_issue_comment
+  - update_issue
+  - create_repository
+  - fork_repository
+  - create_pull_request_review
+  - update_pull_request_branch
