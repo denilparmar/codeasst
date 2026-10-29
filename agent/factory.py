@@ -2,6 +2,7 @@ from langchain.agents import create_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from llm.factory import get_llm
+from agent.hitl import get_hitl_middleware
 from agent.middleware import ToolErrorMiddleware
 from agent.tools import search_codebase
 from observability import get_logger
@@ -28,12 +29,14 @@ async def build_agent(checkpointer):
         run_in_directory,
         *mcp_tools,
     ]
-    middleware = get_summarization_middleware()
+    middleware = [ToolErrorMiddleware(), get_summarization_middleware()]
+    if hitl := get_hitl_middleware():
+        middleware.append(hitl)
 
     return create_agent(
         llm,
         tools=tools,
         system_prompt=SYSTEM_PROMPT,
         checkpointer=checkpointer,
-        middleware=[ToolErrorMiddleware(), middleware],
+        middleware=middleware,
     )

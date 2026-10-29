@@ -3,6 +3,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
+from rich.status import Status
 from rich.table import Table
 import chromadb
 from config import config
@@ -15,6 +16,7 @@ from memory.session import get_current_session, new_session, switch_session
 from memory.short_term import get_session_history, get_checkpointer_db_path
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 import asyncio
+import json
 import signal
 from agent.factory import build_agent
 
@@ -92,13 +94,66 @@ def handle_index(path: str) -> None:
     console.print(f"[dim]Indexing {path}...[/dim]")
 
 
+def ask_decision(action: dict, allowed: list[str]) -> dict:
+    """Show one pending tool call and ask the user what to do with it."""
+    console.print(
+        Panel(
+            f"[bold]{action['name']}[/bold]\n{json.dumps(action['args'], indent=2)}",
+            title="[bold yellow]Approval needed[/bold yellow]",
+            title_align="left",
+            border_style="yellow",
+        )
+    )
+    choice = Prompt.ask("Decision", choices=allowed, default="reject")
+    if choice == "approve":
+        return {"type": "approve"}
+    if choice == "edit":
+        raw = Prompt.ask("New args as JSON", default=json.dumps(action["args"]))
+        try:
+            args = json.loads(raw)
+        except json.JSONDecodeError:
+            console.print("[red]Invalid JSON, rejecting instead.[/red]")
+            return {"type": "reject", "message": "User's edit was invalid JSON."}
+        return {"type": "edit", "edited_action": {"name": action["name"], "args": args}}
+    reason = Prompt.ask("Reason (optional)", default="")
+    return {"type": "reject", "message": reason} if reason else {"type": "reject"}
+
+
+def make_reviewer(status: Status):
+    """Build a reviewer that pauses the spinner while asking for approval."""
+
+    async def review(hitl_request: dict) -> list[dict]:
+        status.stop()
+        allowed = {
+            r["action_name"]: r["allowed_decisions"]
+            for r in hitl_request["review_configs"]
+        }
+        try:
+            return [
+                ask_decision(action, allowed[action["name"]])
+                for action in hitl_request["action_requests"]
+            ]
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Cancelled, rejecting pending tool calls.[/yellow]")
+            return [
+                {"type": "reject", "message": "User cancelled."}
+                for _ in hitl_request["action_requests"]
+            ]
+        finally:
+            status.start()
+
+    return review
+
+
 async def handle_ask(agent, question: str, thread_id: str) -> None:
     if not question:
         console.print("[yellow]Usage: /ask <question>[/yellow]")
         return
     logger.info(f"Ask command received: {question}")
-    with console.status("[dim]Searching the codebase...[/dim]", spinner="dots"):
-        response = await handle_query(agent, question, thread_id)
+    with console.status(
+        "[dim]Searching the codebase...[/dim]", spinner="dots"
+    ) as status:
+        response = await handle_query(agent, question, thread_id, make_reviewer(status))
 
     console.print()
     console.print(
